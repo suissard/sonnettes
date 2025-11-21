@@ -1,0 +1,748 @@
+﻿<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analyseur d'Appels Sonnette</title>
+    <!-- Utilisation de Tailwind CSS pour un design moderne et réactif -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Ajout de Chart.js pour les graphiques -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Ajout de la police Inter pour une meilleure typographie -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* Style de base pour le corps et la police */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #111827; /* gray-900 */
+            color: #d1d5db; /* gray-300 */
+        }
+        /* Style personnalisé pour le file input */
+        input[type="file"]::file-selector-button {
+            background-color: #3b82f6; /* blue-500 */
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 0.375rem;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        input[type="file"]::file-selector-button:hover {
+            background-color: #2563eb; /* blue-600 */
+        }
+        /* Style pour les flèches de tri */
+        th[data-sort] {
+            cursor: pointer;
+            user-select: none;
+        }
+        .sort-arrow {
+            opacity: 0.5;
+            transition: opacity 0.2s;
+            display: inline-block;
+            width: 1em;
+        }
+        .sort-arrow.active {
+            opacity: 1;
+        }
+        /* S'assurer que le calendrier du date picker est visible en mode sombre */
+        input[type="date"]::-webkit-calendar-picker-indicator {
+            filter: invert(1);
+        }
+        /* Style pour le filtre de chambres */
+        .dropdown {
+            position: relative;
+        }
+        .dropdown-content {
+            display: none;
+            position: absolute;
+            background-color: #1f2937; /* gray-800 */
+            min-width: 200px;
+            box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
+            z-index: 10;
+            border-radius: 0.375rem;
+            border: 1px solid #374151; /* gray-700 */
+        }
+        #room-checkbox-list {
+            max-height: 150px;
+            overflow-y: auto;
+        }
+        .dropdown-content label {
+            color: #d1d5db; /* gray-300 */
+            padding: 8px 12px;
+            text-decoration: none;
+            display: block;
+            cursor: pointer;
+        }
+        .dropdown-content label:hover {
+            background-color: #374151; /* gray-700 */
+        }
+        .dropdown-content label input {
+            margin-right: 8px;
+        }
+        /* Bouton flottant */
+        #toggle-panels-btn {
+            transition: transform 0.3s ease-in-out, background-color 0.2s;
+        }
+        #toggle-panels-btn:hover {
+            transform: scale(1.1);
+        }
+        /* Classe pour les éléments cliquables dans les listes de stats */
+        .clickable-stat:hover {
+            text-decoration: underline;
+            background-color: #374151; /* gray-700 */
+        }
+    </style>
+</head>
+<body class="antialiased">
+
+    <div id="app" class="container mx-auto p-4 sm:p-6 lg:p-8">
+        <header class="mb-8 text-center">
+            <h1 class="text-3xl sm:text-4xl font-bold text-white mb-2">Analyseur d'Appels Sonnette 📊</h1>
+            <p class="text-lg text-gray-400">Chargez un fichier CSV pour analyser les temps de réponse.</p>
+        </header>
+
+        <main class="space-y-8">
+            <!-- Section des contrôles et filtres -->
+            <section id="controls" class="bg-gray-800 p-6 rounded-xl shadow-lg transition-all duration-300">
+                <div id="file-upload-section">
+                    <label for="csvFile" class="block text-sm font-medium text-gray-300 mb-2">1. Charger le fichier d'historique (.csv)</label>
+                    <input type="file" id="csvFile" accept=".csv" class="block w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-500 file:text-white hover:file:bg-blue-600">
+                </div>
+                
+                <!-- Wrapper for filters that will be toggled -->
+                <div id="filters-wrapper" class="hidden">
+                    <div class="flex justify-between items-center mt-4 border-b border-gray-700 pb-2 mb-6">
+                         <h3 class="text-lg font-semibold text-white">2. Filtrer les résultats</h3>
+                         <button id="change-file-btn" class="text-sm text-blue-400 hover:underline">Changer de fichier</button>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+                        <div class="lg:col-span-1">
+                            <label for="filter-min-response-time" class="block text-sm font-medium text-gray-300">Temps de réponse (min)</label>
+                            <div class="flex items-center space-x-2 mt-1">
+                                <input type="number" id="filter-min-response-time" min="0" placeholder="Min" class="block w-full bg-gray-700 border-gray-600 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm text-white p-2">
+                                <input type="number" id="filter-max-response-time" min="0" placeholder="Max" class="block w-full bg-gray-700 border-gray-600 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm text-white p-2">
+                            </div>
+                        </div>
+                        
+                        <div class="dropdown">
+                            <label class="block text-sm font-medium text-gray-300">Chambres</label>
+                            <button id="room-filter-btn" class="mt-1 w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm p-2 text-left text-white">Sélectionner des chambres</button>
+                            <div id="room-filter-dropdown" class="dropdown-content">
+                                <div class="p-2 flex justify-between border-b border-gray-600">
+                                    <button id="select-all-rooms" class="text-xs text-blue-400 hover:underline focus:outline-none">Tout cocher</button>
+                                    <button id="deselect-all-rooms" class="text-xs text-blue-400 hover:underline focus:outline-none">Tout décocher</button>
+                                </div>
+                                <div id="room-checkbox-list">
+                                    <!-- Les chambres seront injectées ici -->
+                                </div>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label for="filter-type" class="block text-sm font-medium text-gray-300">Type d'appel</label>
+                            <select id="filter-type" class="mt-1 block w-full bg-gray-700 border-gray-600 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm text-white p-2">
+                                <option value="">Tous les types</option>
+                                <option value="NORMAL">Normal</option>
+                                <option value="PULLCORD">Tirette</option>
+                                <option value="EMERGENCY">Urgence</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label for="filter-start-date" class="block text-sm font-medium text-gray-300">Date de début</label>
+                            <input type="date" id="filter-start-date" class="mt-1 block w-full bg-gray-700 border-gray-600 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm text-white p-2">
+                        </div>
+                        
+                        <div>
+                            <label for="filter-end-date" class="block text-sm font-medium text-gray-300">Date de fin</label>
+                            <input type="date" id="filter-end-date" class="mt-1 block w-full bg-gray-700 border-gray-600 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm text-white p-2">
+                        </div>
+
+                        <div class="flex items-end col-span-full lg:col-span-2 space-x-4">
+                             <button id="apply-filters" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md transition">
+                                Appliquer les filtres
+                            </button>
+                            <button id="reset-filters" class="w-full bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-md transition">
+                                Réinitialiser
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Section des résultats -->
+            <section id="results" class="hidden">
+                 <div id="stats-and-charts" class="transition-all duration-300">
+                    <!-- Statistiques générales -->
+                    <div id="stats" class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 text-center">
+                        <div class="bg-gray-800 p-4 rounded-lg">
+                            <h4 class="text-sm font-medium text-gray-400">Période Analysée</h4>
+                            <p id="stats-period" class="text-xl font-semibold text-white">-</p>
+                        </div>
+                        <div class="bg-gray-800 p-4 rounded-lg">
+                            <h4 class="text-sm font-medium text-gray-400">Appels Filtrés</h4>
+                            <p id="stats-count" class="text-xl font-semibold text-white">-</p>
+                        </div>
+                        <div class="bg-gray-800 p-4 rounded-lg">
+                            <h4 class="text-sm font-medium text-gray-400">Moyenne / Écart-type</h4>
+                            <p id="stats-avg-std" class="text-xl font-semibold text-white">-</p>
+                        </div>
+                    </div>
+
+                    <!-- Section Graphiques -->
+                    <div id="charts-section" class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+                        <div class="bg-gray-800 p-6 rounded-xl shadow-lg">
+                            <h3 class="text-lg font-semibold text-white mb-4">Nombre d'appels par heure</h3>
+                            <canvas id="calls-chart"></canvas>
+                        </div>
+                        <div class="bg-gray-800 p-6 rounded-xl shadow-lg">
+                            <h3 class="text-lg font-semibold text-white mb-4">Temps de réponse moyen par heure (min)</h3>
+                            <canvas id="response-time-chart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Panneau de statistiques descriptives générales -->
+                    <div id="desc-stats-general" class="bg-gray-800 p-6 rounded-xl shadow-lg mb-6">
+                        <h3 class="text-lg font-semibold text-white mb-4 border-b border-gray-700 pb-2">Statistiques descriptives (vue générale)</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                                <h4 class="text-sm font-medium text-gray-400">Temps de réponse médian</h4>
+                                <p id="stats-median" class="text-xl font-semibold text-white">-</p>
+                            </div>
+                            <div>
+                                <h4 class="text-sm font-medium text-gray-400">Top 8 chambres (nb d'appels)</h4>
+                                <ol id="stats-top-rooms-by-count" class="list-decimal list-inside text-white mt-1 space-y-1">
+                                    <!-- Top 8 by count will be injected here -->
+                                </ol>
+                            </div>
+                            <div class="md:col-span-1">
+                                 <h4 class="text-sm font-medium text-gray-400">Top 8 chambres (tps moyen)</h4>
+                                 <ol id="stats-top-rooms" class="list-decimal list-inside text-white mt-1 space-y-1">
+                                     <!-- Top 8 by time will be injected here -->
+                                 </ol>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Panneau de statistiques par chambre -->
+                    <div id="desc-stats-single-room" class="bg-gray-800 p-6 rounded-xl shadow-lg mb-6 hidden">
+                        <h3 id="single-room-title" class="text-lg font-semibold text-white mb-4 border-b border-gray-700 pb-2">Statistiques pour la chambre X</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                                <h4 class="text-sm font-medium text-gray-400">Nombre d'appels</h4>
+                                <p id="single-room-count" class="text-xl font-semibold text-white">-</p>
+                            </div>
+                            <div>
+                                <h4 class="text-sm font-medium text-gray-400">Répartition par type</h4>
+                                <ul id="single-room-type-dist" class="text-white mt-1">
+                                    <!-- La répartition sera injectée ici -->
+                                </ul>
+                            </div>
+                            <div class="md:col-span-1">
+                                 <h4 class="text-sm font-medium text-gray-400">Top 5 temps de réponse (min)</h4>
+                                 <ol id="single-room-top-times" class="list-decimal list-inside text-white mt-1">
+                                     <!-- Le top 5 sera injecté ici -->
+                                 </ol>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Tableau des résultats -->
+                <div class="bg-gray-800 rounded-xl shadow-lg overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full">
+                            <thead class="bg-gray-700">
+                                <tr>
+                                    <th scope="col" class="py-3 px-6 text-left text-xs font-medium text-gray-300 uppercase tracking-wider" data-sort="date">
+                                        Date <span class="sort-arrow"></span>
+                                    </th>
+                                    <th scope="col" class="py-3 px-6 text-left text-xs font-medium text-gray-300 uppercase tracking-wider" data-sort="room">
+                                        Chambre <span class="sort-arrow"></span>
+                                    </th>
+                                    <th scope="col" class="py-3 px-6 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                                        Type
+                                    </th>
+                                    <th scope="col" class="py-3 px-6 text-left text-xs font-medium text-gray-300 uppercase tracking-wider" data-sort="responseTime">
+                                        Temps de réponse (min) <span class="sort-arrow"></span>
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody id="results-body" class="divide-y divide-gray-700">
+                                <!-- Les lignes de résultats seront injectées ici par JavaScript -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div id="no-results" class="text-center py-10 text-gray-400 hidden">
+                    <p>Aucun résultat ne correspond à vos filtres.</p>
+                </div>
+            </section>
+            
+            <div id="initial-message" class="text-center py-10 text-gray-400">
+                <!-- Message géré par JS -->
+            </div>
+        </main>
+    </div>
+    
+    <!-- Bouton flottant -->
+    <button id="toggle-panels-btn" class="hidden fixed top-8 right-8 bg-blue-600 text-white w-14 h-14 rounded-full shadow-lg flex items-center justify-center z-20" title="Afficher/Masquer les filtres">
+        <!-- L'icône sera injectée par JS -->
+    </button>
+
+    <footer class="text-center mt-12 text-gray-500 text-sm">
+        <p>Réalisé par clavier.jeremy@gmail.com</p>
+    </footer>
+
+    <script>
+        // --- DOM Elements ---
+        const csvFileInput = document.getElementById('csvFile');
+        const resultsSection = document.getElementById('results');
+        const initialMessage = document.getElementById('initial-message');
+        const resultsBody = document.getElementById('results-body');
+        const noResultsMessage = document.getElementById('no-results');
+        
+        // Filter and panels elements
+        const fileUploadSection = document.getElementById('file-upload-section');
+        const filtersWrapper = document.getElementById('filters-wrapper');
+        const controlsPanel = document.getElementById('controls');
+        const changeFileBtn = document.getElementById('change-file-btn');
+        const togglePanelsBtn = document.getElementById('toggle-panels-btn');
+        const applyFiltersButton = document.getElementById('apply-filters');
+        const minResponseTimeFilter = document.getElementById('filter-min-response-time');
+        const maxResponseTimeFilter = document.getElementById('filter-max-response-time');
+        const roomFilterBtn = document.getElementById('room-filter-btn');
+        const roomFilterDropdown = document.getElementById('room-filter-dropdown');
+        const typeFilter = document.getElementById('filter-type');
+        const startDateFilter = document.getElementById('filter-start-date');
+        const endDateFilter = document.getElementById('filter-end-date');
+        const resetFiltersButton = document.getElementById('reset-filters');
+        
+        // Stats elements
+        const statsGeneral = document.getElementById('desc-stats-general');
+        const statsSingleRoom = document.getElementById('desc-stats-single-room');
+        const statsPeriod = document.getElementById('stats-period');
+        const statsCount = document.getElementById('stats-count');
+        const statsAvgStd = document.getElementById('stats-avg-std');
+        const statsMedian = document.getElementById('stats-median');
+        const statsTopRoomsByCount = document.getElementById('stats-top-rooms-by-count');
+        const statsTopRooms = document.getElementById('stats-top-rooms');
+        const singleRoomTitle = document.getElementById('single-room-title');
+        const singleRoomCount = document.getElementById('single-room-count');
+        const singleRoomTypeDist = document.getElementById('single-room-type-dist');
+        const singleRoomTopTimes = document.getElementById('single-room-top-times');
+        
+        // Sorting elements
+        const sortHeaders = document.querySelectorAll('th[data-sort]');
+
+        // Chart instances
+        let callsChartInstance = null;
+        let responseTimeChartInstance = null;
+
+        // --- State ---
+        let allData = [];
+        let sortState = { column: 'date', direction: 'desc' };
+        let panelsVisible = false;
+        
+        // SVG Icons for toggle button
+        const iconFilter = `<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 4h18M6 8h12M9 12h6" /></svg>`;
+        const iconFilterOff = `<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" /></svg>`;
+
+        // --- Event Listeners & Initial Setup ---
+        document.addEventListener('DOMContentLoaded', setInitialState);
+        csvFileInput.addEventListener('change', handleFileSelect);
+        applyFiltersButton.addEventListener('click', render);
+        resetFiltersButton.addEventListener('click', resetFilters);
+        togglePanelsBtn.addEventListener('click', togglePanels);
+        changeFileBtn.addEventListener('click', setInitialState);
+        sortHeaders.forEach(header => header.addEventListener('click', () => handleSort(header.dataset.sort)));
+        roomFilterBtn.addEventListener('click', () => {
+            roomFilterDropdown.style.display = roomFilterDropdown.style.display === 'block' ? 'none' : 'block';
+        });
+        document.addEventListener('click', (e) => {
+            if (!roomFilterBtn.contains(e.target) && !roomFilterDropdown.contains(e.target)) {
+                roomFilterDropdown.style.display = 'none';
+            }
+        });
+        statsTopRoomsByCount.addEventListener('click', handleTopRoomClick);
+        statsTopRooms.addEventListener('click', handleTopRoomClick);
+
+
+        // --- Functions ---
+        
+        function setInitialState() {
+            controlsPanel.classList.remove('hidden');
+            fileUploadSection.classList.remove('hidden');
+            filtersWrapper.classList.add('hidden');
+            initialMessage.classList.remove('hidden');
+            initialMessage.innerHTML = `<p>Veuillez charger un fichier CSV pour commencer l'analyse.</p>`;
+            resultsSection.classList.add('hidden');
+            togglePanelsBtn.classList.add('hidden');
+            csvFileInput.value = '';
+            allData = [];
+        }
+
+        function togglePanels() {
+            panelsVisible = !panelsVisible;
+            filtersWrapper.classList.toggle('hidden', !panelsVisible);
+            updateTogglePanelsButton();
+        }
+        
+        function updateTogglePanelsButton() {
+            togglePanelsBtn.innerHTML = panelsVisible ? iconFilterOff : iconFilter;
+            togglePanelsBtn.title = panelsVisible ? 'Masquer les filtres' : 'Afficher les filtres';
+        }
+
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            initialMessage.innerHTML = `<p>Chargement du fichier...</p>`;
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const text = e.target.result;
+                    allData = processData(parseCSV(text));
+                    
+                    if(allData.length === 0) {
+                        throw new Error("Aucune donnée pertinente trouvée dans le fichier.");
+                    }
+
+                    populateRoomFilter();
+                    setDefaultDates();
+                    
+                    fileUploadSection.classList.add('hidden');
+                    filtersWrapper.classList.remove('hidden');
+                    
+                    panelsVisible = false; 
+                    filtersWrapper.classList.add('hidden');
+                    
+                    render();
+                    
+                    resultsSection.classList.remove('hidden');
+                    initialMessage.classList.add('hidden');
+                    togglePanelsBtn.classList.remove('hidden');
+                    updateTogglePanelsButton();
+                } catch (error) {
+                    console.error("Erreur lors du traitement du fichier:", error);
+                    alert("Impossible de lire le fichier. Assurez-vous qu'il est au bon format, contient des données valides et est encodé en ANSI/ISO-8859-1.");
+                    setInitialState();
+                }
+            };
+            reader.onerror = function() {
+                alert("Erreur de lecture du fichier.");
+                setInitialState();
+            };
+            reader.readAsText(file, 'ISO-8859-1');
+        }
+
+        function handleTopRoomClick(event) {
+            const targetLi = event.target.closest('li');
+            if (targetLi && targetLi.dataset.room) {
+                const roomNumber = parseInt(targetLi.dataset.room, 10);
+                
+                document.querySelectorAll('.room-checkbox').forEach(cb => cb.checked = false);
+                const roomCheckbox = document.querySelector(`.room-checkbox[value="${roomNumber}"]`);
+                if (roomCheckbox) {
+                    roomCheckbox.checked = true;
+                }
+                
+                render();
+            }
+        }
+
+        function parseCSV(csvText) {
+            return csvText.split('\n').slice(1).map(line => line.replace(/(\"|\r)/g, "").trim().split(';')).filter(line => line.length > 1);
+        }
+
+        function processData(rawData) {
+            let relevantEvents = rawData.filter(row =>
+                row.length >= 5 && ["NORMAL", "ERASE", "PULLCORD", "EMERGENCY"].includes(row[2]) && row[4] && row[4].match(/(CHAMBRE|CH) [0-9]+/)
+            );
+
+            let processed = relevantEvents.map(row => {
+                const [day, month, year] = row[0].split('/');
+                const [hours, minutes, seconds] = row[1].split(':');
+                
+                if (!day || !month || !year || !hours || !minutes) return null;
+                const timestamp = new Date(year, month - 1, day, hours, minutes, seconds || 0);
+                if (isNaN(timestamp.getTime())) return null;
+
+                let roomMatch = row[4].match(/(CHAMBRE|CH) [0-9]+.{0,1}/);
+                if (!roomMatch) return null;
+                let roomStr = roomMatch[0].replace("2B", "3");
+                let roomNumMatch = roomStr.match(/[0-9]+/);
+                if(!roomNumMatch) return null;
+                let room = Number(roomNumMatch[0]);
+
+                return { date: timestamp, room, type: row[2], responseTime: 0 };
+            }).filter(Boolean).sort((a, b) => a.date - b.date);
+
+            return processed.map((event, index, array) => {
+                if (event.type === "ERASE") return { ...event, responseTime: 0 };
+                let responseTime = 0;
+                for (let j = index + 1; j < array.length; j++) {
+                    if (array[j].room === event.room && array[j].type === "ERASE") {
+                        responseTime = array[j].date.getTime() - event.date.getTime();
+                        break;
+                    }
+                }
+                return { ...event, responseTime };
+            });
+        }
+
+        function populateRoomFilter() {
+            const rooms = [...new Set(allData.map(item => item.room))].sort((a, b) => a - b);
+            const checkboxList = document.getElementById('room-checkbox-list');
+            checkboxList.innerHTML = '';
+            rooms.forEach(room => {
+                const label = document.createElement('label');
+                label.innerHTML = `<input type="checkbox" class="room-checkbox" value="${room}"> Ch. ${room}`;
+                checkboxList.appendChild(label);
+            });
+            
+            document.getElementById('select-all-rooms').addEventListener('click', () => {
+                document.querySelectorAll('.room-checkbox').forEach(cb => cb.checked = true);
+            });
+            document.getElementById('deselect-all-rooms').addEventListener('click', () => {
+                document.querySelectorAll('.room-checkbox').forEach(cb => cb.checked = false);
+            });
+        }
+        
+        function setDefaultDates() {
+            if (!allData.length) return;
+            const dates = allData.map(item => item.date).filter(d => d instanceof Date && !isNaN(d));
+            if (!dates.length) return;
+            const toYYYYMMDD = d => d.toISOString().split('T')[0];
+            const minDateStr = toYYYYMMDD(new Date(Math.min.apply(null, dates)));
+            const maxDateStr = toYYYYMMDD(new Date(Math.max.apply(null, dates)));
+            startDateFilter.value = minDateStr;
+            endDateFilter.value = maxDateStr;
+        }
+
+        function getSelectedRooms() {
+            return Array.from(document.querySelectorAll('.room-checkbox:checked')).map(cb => parseInt(cb.value, 10));
+        }
+
+        function applyFiltersAndSort() {
+            const minResponseTimeThreshold = (parseFloat(minResponseTimeFilter.value) || 0) * 60 * 1000;
+            const maxResponseTimeValue = parseFloat(maxResponseTimeFilter.value);
+            const maxResponseTimeThreshold = !isNaN(maxResponseTimeValue) ? maxResponseTimeValue * 60 * 1000 : Infinity;
+            
+            const selectedRooms = getSelectedRooms();
+            const typeQuery = typeFilter.value;
+            let startDateQuery = startDateFilter.value ? new Date(startDateFilter.value.replace(/-/g, '/')) : null;
+            let endDateQuery = endDateFilter.value ? new Date(endDateFilter.value.replace(/-/g, '/')) : null;
+            if(startDateQuery) startDateQuery.setHours(0,0,0,0);
+            if(endDateQuery) endDateQuery.setHours(23,59,59,999);
+
+            let filteredData = allData.filter(item => {
+                const roomMatch = !selectedRooms.length || selectedRooms.includes(item.room);
+                const typeMatch = !typeQuery || item.type === typeQuery;
+                const timeMatch = item.responseTime >= minResponseTimeThreshold && item.responseTime <= maxResponseTimeThreshold;
+                const startDateMatch = !startDateQuery || item.date >= startDateQuery;
+                const endDateMatch = !endDateQuery || item.date <= endDateQuery;
+                return item.type !== 'ERASE' && roomMatch && typeMatch && timeMatch && startDateMatch && endDateMatch;
+            });
+
+            return filteredData.sort((a, b) => {
+                const valA = a[sortState.column];
+                const valB = b[sortState.column];
+                if (valA < valB) return sortState.direction === 'asc' ? -1 : 1;
+                if (valA > valB) return sortState.direction === 'asc' ? 1 : -1;
+                return 0;
+            });
+        }
+
+        function handleSort(column) {
+            sortState.direction = sortState.column === column && sortState.direction === 'asc' ? 'desc' : 'asc';
+            sortState.column = column;
+            render();
+        }
+
+        function updateSortArrows() {
+            sortHeaders.forEach(header => {
+                const arrow = header.querySelector('.sort-arrow');
+                arrow.classList.toggle('active', header.dataset.sort === sortState.column);
+                arrow.textContent = header.dataset.sort === sortState.column ? (sortState.direction === 'asc' ? '▲' : '▼') : '';
+            });
+        }
+        
+        function resetFilters() {
+            minResponseTimeFilter.value = '';
+            maxResponseTimeFilter.value = '';
+            typeFilter.value = '';
+            document.querySelectorAll('.room-checkbox').forEach(cb => cb.checked = false);
+            setDefaultDates();
+            render();
+        }
+
+        // --- Fonctions de calcul de statistiques ---
+        const getAverage = arr => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
+        const getStDev = arr => {
+            if (arr.length < 2) return 0;
+            const mean = getAverage(arr);
+            const variance = arr.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / (arr.length -1);
+            return Math.sqrt(variance);
+        };
+        const getMedian = arr => {
+            if (!arr.length) return 0;
+            const sorted = [...arr].sort((a, b) => a - b);
+            const mid = Math.floor(sorted.length / 2);
+            return sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+        };
+        const getTopRoomsByCount = data => {
+            if (!data.length) return [];
+            const roomCounts = data.reduce((acc, item) => ({ ...acc, [item.room]: (acc[item.room] || 0) + 1 }), {});
+            return Object.entries(roomCounts)
+                .map(([room, count]) => ({ room, count }))
+                .sort((a, b) => b.count - a.count)
+                .slice(0, 8);
+        };
+        const getTopRoomsByTime = data => {
+            if (!data.length) return [];
+            const roomTimes = data.reduce((acc, item) => ({ ...acc, [item.room]: [...(acc[item.room] || []), item.responseTime] }), {});
+            return Object.entries(roomTimes).map(([room, times]) => ({ room, avgTime: getAverage(times) })).sort((a, b) => b.avgTime - a.avgTime).slice(0, 8);
+        };
+
+        // --- Fonctions pour les graphiques ---
+        function createOrUpdateCharts(data) {
+            const callsByHour = Array(24).fill(0);
+            const responseTimesByHour = Array(24).fill(0).map(() => []);
+
+            data.forEach(item => {
+                const hour = item.date.getHours();
+                callsByHour[hour]++;
+                if (item.responseTime > 0) {
+                    responseTimesByHour[hour].push(item.responseTime);
+                }
+            });
+
+            const avgResponseTimeByHour = responseTimesByHour.map(times => getAverage(times) / 60000); // en minutes
+
+            const chartLabels = Array.from({ length: 24 }, (_, i) => `${i}h`);
+            
+            // Chart.js global config
+            Chart.defaults.color = '#9ca3af'; // gray-400
+            Chart.defaults.borderColor = '#4b5563'; // gray-600
+
+            // Graphique Appels par heure
+            if (callsChartInstance) callsChartInstance.destroy();
+            callsChartInstance = new Chart(document.getElementById('calls-chart'), {
+                type: 'bar',
+                data: {
+                    labels: chartLabels,
+                    datasets: [{
+                        label: "Nombre d'appels",
+                        data: callsByHour,
+                        backgroundColor: 'rgba(59, 130, 246, 0.5)',
+                        borderColor: 'rgba(59, 130, 246, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: { scales: { y: { beginAtZero: true, grid: { color: '#374151' } }, x: { grid: { color: '#374151' } } } }
+            });
+
+            // Graphique Temps de réponse par heure
+            if (responseTimeChartInstance) responseTimeChartInstance.destroy();
+            responseTimeChartInstance = new Chart(document.getElementById('response-time-chart'), {
+                type: 'line',
+                data: {
+                    labels: chartLabels,
+                    datasets: [{
+                        label: 'Temps de réponse moyen (min)',
+                        data: avgResponseTimeByHour,
+                        fill: false,
+                        borderColor: 'rgb(239, 68, 68)',
+                        tension: 0.1
+                    }]
+                },
+                options: { scales: { y: { beginAtZero: true, grid: { color: '#374151' } }, x: { grid: { color: '#374151' } } } }
+            });
+        }
+        
+        function render() {
+            if (allData.length === 0) return; 
+            
+            try {
+                const filteredData = applyFiltersAndSort();
+                const selectedRooms = getSelectedRooms();
+                
+                if (selectedRooms.length === 0) {
+                    roomFilterBtn.textContent = 'Sélectionner des chambres';
+                } else if (selectedRooms.length === 1) {
+                    roomFilterBtn.textContent = `Chambre ${selectedRooms[0]}`;
+                } else {
+                    roomFilterBtn.textContent = `${selectedRooms.length} chambres sélectionnées`;
+                }
+
+                resultsBody.innerHTML = '';
+                const hasResults = filteredData.length > 0;
+                noResultsMessage.classList.toggle('hidden', hasResults);
+                resultsBody.closest('.overflow-x-auto').parentElement.classList.toggle('hidden', !hasResults);
+                if(hasResults) {
+                    filteredData.forEach(item => {
+                        const row = document.createElement('tr');
+                        row.className = 'hover:bg-gray-700 transition-colors';
+                        row.innerHTML = `
+                            <td class="py-4 px-6 text-sm font-medium text-white whitespace-nowrap">${item.date.toLocaleString('fr-FR')}</td>
+                            <td class="py-4 px-6 text-sm text-gray-300 whitespace-nowrap">${item.room}</td>
+                            <td class="py-4 px-6 text-sm text-gray-300 whitespace-nowrap">
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${item.type === 'EMERGENCY' ? 'bg-red-200 text-red-800' : (item.type === 'PULLCORD' ? 'bg-yellow-200 text-yellow-800' : 'bg-blue-200 text-blue-800')}">
+                                    ${item.type}
+                                </span>
+                            </td>
+                            <td class="py-4 px-6 text-sm text-gray-300 whitespace-nowrap">${Math.round(item.responseTime / 60000)}</td>
+                        `;
+                        resultsBody.appendChild(row);
+                    });
+                }
+
+                const responseTimes = filteredData.map(d => d.responseTime);
+                const validDates = filteredData.map(i => i.date).filter(d => d instanceof Date && !isNaN(d));
+                if (validDates.length > 0) {
+                    statsPeriod.textContent = `${new Date(Math.min.apply(null, validDates)).toLocaleDateString('fr-FR')} au ${new Date(Math.max.apply(null, validDates)).toLocaleDateString('fr-FR')}`;
+                } else {
+                    statsPeriod.textContent = '-';
+                }
+                statsCount.textContent = filteredData.length;
+                statsAvgStd.textContent = `${Math.round(getAverage(responseTimes) / 60000)}m / ${Math.round(getStDev(responseTimes) / 60000)}m`;
+
+                const isSingleRoomView = selectedRooms.length === 1;
+                statsGeneral.classList.toggle('hidden', isSingleRoomView || !hasResults);
+                statsSingleRoom.classList.toggle('hidden', !isSingleRoomView || !hasResults);
+
+                if (isSingleRoomView && hasResults) {
+                    const roomNumber = selectedRooms[0];
+                    singleRoomTitle.textContent = `Statistiques pour la chambre ${roomNumber}`;
+                    singleRoomCount.textContent = filteredData.length;
+                    const typeDistribution = filteredData.reduce((acc, item) => ({ ...acc, [item.type]: (acc[item.type] || 0) + 1 }), {});
+                    singleRoomTypeDist.innerHTML = Object.entries(typeDistribution).map(([type, count]) => `<li>${type}: ${count}</li>`).join('') || '<li>-</li>';
+                    const topTimes = filteredData.sort((a,b) => b.responseTime - a.responseTime).slice(0, 5);
+                    singleRoomTopTimes.innerHTML = topTimes.map(item => `<li>${Math.round(item.responseTime / 60000)} min (${item.date.toLocaleDateString('fr-FR')})</li>`).join('') || '<li>-</li>';
+                } else {
+                    statsMedian.textContent = `${Math.round(getMedian(responseTimes) / 60000)} minutes`;
+                    
+                    const topRoomsByCount = getTopRoomsByCount(filteredData);
+                    statsTopRoomsByCount.innerHTML = topRoomsByCount.map(item => `<li class="cursor-pointer p-1 rounded clickable-stat" data-room="${item.room}">Ch. ${item.room} (${item.count} appels)</li>`).join('') || '<li>-</li>';
+                    
+                    const topRooms = getTopRoomsByTime(filteredData);
+                    statsTopRooms.innerHTML = topRooms.map(item => `<li class="cursor-pointer p-1 rounded clickable-stat" data-room="${item.room}">Ch. ${item.room} (${Math.round(item.avgTime / 60000)}m)</li>`).join('') || '<li>-</li>';
+                }
+                
+                // Mettre à jour les graphiques
+                createOrUpdateCharts(filteredData);
+
+                updateSortArrows();
+            } catch (error) {
+                console.error("Erreur lors de l'affichage :", error);
+                alert("Une erreur est survenue. Vérifiez la console pour les détails.");
+            }
+        }
+    </script>
+</body>
+</html>
